@@ -30,8 +30,10 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
                 const newContent = content.slice(lastContentRef.current.length);
                 if (newContent) {
                     if (isStreaming) {
-                        // Durante o streaming, adiciona caractere por caractere
-                        rendererRef.current.streamCharacterByCharacter(newContent, 20)
+                        // Durante o streaming, adiciona por chunks otimizados
+                        // @ts-ignore - streamByChunks \u00e9 um novo m\u00e9todo
+                        const streamMethod = rendererRef.current.streamByChunks || rendererRef.current.streamCharacterByCharacter;
+                        streamMethod.call(rendererRef.current, newContent, 50, 10)
                             .then(() => {
                                 lastContentRef.current = content;
                             })

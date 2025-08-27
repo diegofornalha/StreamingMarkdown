@@ -5,6 +5,7 @@ import os
 import asyncio
 from typing import AsyncGenerator, Optional, Dict, Any
 import json
+import time
 
 # Adiciona o diretório pai ao path para importar o SDK
 parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -54,7 +55,7 @@ class ClaudeHandler:
         session_id: str, 
         message: str
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """Envia mensagem e retorna stream de respostas."""
+        """Envia mensagem e retorna stream de respostas otimizado."""
         
         # Cria sessão se não existir
         if session_id not in self.clients:
@@ -62,21 +63,51 @@ class ClaudeHandler:
             
         client = self.clients[session_id]
         
+        # Buffer para acumular texto antes de enviar
+        text_buffer = []
+        buffer_size = 0
+        BUFFER_THRESHOLD = 100  # Envia a cada 100 caracteres
+        last_flush = time.time()
+        FLUSH_INTERVAL = 0.1  # Flush a cada 100ms
+        
+        async def flush_buffer():
+            """Envia conteúdo do buffer."""
+            nonlocal text_buffer, buffer_size
+            if text_buffer:
+                combined_text = ''.join(text_buffer)
+                yield {
+                    "type": "assistant_text",
+                    "content": combined_text,
+                    "session_id": session_id
+                }
+                text_buffer = []
+                buffer_size = 0
+        
         try:
             # Envia query
             await client.query(message)
             
-            # Stream de respostas
+            # Stream de respostas com buffer
             async for msg in client.receive_response():
                 if isinstance(msg, AssistantMessage):
                     for block in msg.content:
                         if isinstance(block, TextBlock):
-                            yield {
-                                "type": "assistant_text",
-                                "content": block.text,
-                                "session_id": session_id
-                            }
+                            # Adiciona ao buffer
+                            text_buffer.append(block.text)
+                            buffer_size += len(block.text)
+                            
+                            # Flush se atingir threshold ou timeout
+                            current_time = time.time()
+                            if buffer_size >= BUFFER_THRESHOLD or (current_time - last_flush) >= FLUSH_INTERVAL:
+                                async for response in flush_buffer():
+                                    yield response
+                                last_flush = current_time
+                                
                         elif isinstance(block, ToolUseBlock):
+                            # Flush buffer antes de enviar tool use
+                            async for response in flush_buffer():
+                                yield response
+                                
                             yield {
                                 "type": "tool_use",
                                 "tool": block.name,
@@ -95,6 +126,10 @@ class ClaudeHandler:
                             }
                             
                 elif isinstance(msg, ResultMessage):
+                    # Flush qualquer texto restante no buffer
+                    async for response in flush_buffer():
+                        yield response
+                    
                     result_data = {
                         "type": "result",
                         "session_id": session_id
@@ -114,6 +149,10 @@ class ClaudeHandler:
                         
                     yield result_data
                     break
+            
+            # Flush final do buffer se houver conteúdo
+            async for response in flush_buffer():
+                yield response
                     
         except Exception as e:
             yield {

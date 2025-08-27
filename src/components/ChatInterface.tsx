@@ -1,42 +1,36 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { MessageInput } from './MessageInput';
 import { StreamingMessage } from './StreamingMessage';
-import ChatAPI, { ChatMessage, StreamResponse } from '../lib/api';
+import { useStreamingChat } from '../hooks/useStreamingChat';
+import { ChatMessage } from '../lib/api';
 
 export const ChatInterface: React.FC = () => {
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
-    const [isStreaming, setIsStreaming] = useState(false);
-    const [currentStreamContent, setCurrentStreamContent] = useState('');
-    const [sessionId, setSessionId] = useState<string | null>(null);
-    const [tokenInfo, setTokenInfo] = useState<{ input?: number; output?: number } | null>(null);
-    const [costInfo, setCostInfo] = useState<number | null>(null);
+    // Hook customizado simplificado para gerenciar todo o estado
+    const {
+        messages,
+        isStreaming,
+        currentStreamContent,
+        sessionId,
+        tokenInfo,
+        costInfo,
+        initializeAPI,
+        sendMessage,
+        clearSession,
+        interruptStreaming,
+        cleanup
+    } = useStreamingChat();
     
-    const apiRef = useRef<ChatAPI | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
-    const streamContentRef = useRef<string>('');
-    const tokenInfoRef = useRef<{ input?: number; output?: number } | null>(null);
-    const costInfoRef = useRef<number | null>(null);
 
     useEffect(() => {
-        // Evita duplicação em Strict Mode
-        if (apiRef.current) return;
+        // Inicializa API quando o componente monta
+        initializeAPI();
         
-        // Inicializa API
-        apiRef.current = new ChatAPI();
-        
-        // Cria sessão inicial
-        apiRef.current.createSession().then(id => {
-            setSessionId(id);
-        });
-
+        // Cleanup quando desmonta
         return () => {
-            // Cleanup
-            if (apiRef.current && sessionId) {
-                apiRef.current.deleteSession().catch(console.error);
-                apiRef.current = null;
-            }
+            cleanup();
         };
-    }, []);
+    }, [initializeAPI, cleanup]);
 
     useEffect(() => {
         // Auto-scroll para última mensagem
@@ -44,133 +38,19 @@ export const ChatInterface: React.FC = () => {
     }, [messages, currentStreamContent]);
 
     const handleSendMessage = async (message: string) => {
-        if (!apiRef.current || isStreaming) return;
-
+        if (isStreaming) return;
         console.log('Sending message:', message);
-
-        // Adiciona mensagem do usuário
-        const userMessage: ChatMessage = {
-            role: 'user',
-            content: message,
-            timestamp: new Date()
-        };
-        
-        setMessages(prev => [...prev, userMessage]);
-        setIsStreaming(true);
-        setCurrentStreamContent('');
-        setTokenInfo(null);
-        setCostInfo(null);
-
-        // Reset refs
-        streamContentRef.current = '';
-        tokenInfoRef.current = null;
-        costInfoRef.current = null;
-
-        try {
-            await apiRef.current.sendMessage(
-                message,
-                (data: StreamResponse) => {
-                    console.log('Stream data:', data);
-                    if (data.type === 'assistant_text') {
-                        const newContent = data.content || '';
-                        streamContentRef.current += newContent;
-                        setCurrentStreamContent(streamContentRef.current);
-                    } else if (data.type === 'tool_use') {
-                        const toolMsg = `\n📦 Usando ferramenta: ${data.tool}\n`;
-                        streamContentRef.current += toolMsg;
-                        setCurrentStreamContent(streamContentRef.current);
-                    } else if (data.type === 'tool_result') {
-                        // Opcionalmente mostrar resultados de ferramentas
-                    } else if (data.type === 'result') {
-                        // Atualiza informações de tokens e custo
-                        if (data.input_tokens !== undefined) {
-                            tokenInfoRef.current = {
-                                input: data.input_tokens,
-                                output: data.output_tokens
-                            };
-                            setTokenInfo(tokenInfoRef.current);
-                        }
-                        if (data.cost_usd !== undefined) {
-                            costInfoRef.current = data.cost_usd;
-                            setCostInfo(data.cost_usd);
-                        }
-                    }
-                },
-                (error: string) => {
-                    console.error('Stream error:', error);
-                    const errorMsg = `\n❌ Erro: ${error}`;
-                    streamContentRef.current += errorMsg;
-                    setCurrentStreamContent(streamContentRef.current);
-                },
-                () => {
-                    console.log('Stream complete, final content:', streamContentRef.current);
-                    // Streaming completo - adiciona mensagem final
-                    if (streamContentRef.current) {
-                        // Limpa o conteúdo de streaming ANTES de adicionar à lista
-                        const finalContent = streamContentRef.current;
-                        const finalTokens = tokenInfoRef.current;
-                        const finalCost = costInfoRef.current;
-                        
-                        // Limpa o estado de streaming primeiro
-                        setCurrentStreamContent('');
-                        setIsStreaming(false);
-                        
-                        // Depois adiciona a mensagem final
-                        setTimeout(() => {
-                            setMessages(prev => [...prev, {
-                                role: 'assistant',
-                                content: finalContent,
-                                timestamp: new Date(),
-                                tokens: finalTokens || undefined,
-                                cost: finalCost || undefined
-                            } as ChatMessage]);
-                        }, 0);
-                    } else {
-                        setCurrentStreamContent('');
-                        setIsStreaming(false);
-                    }
-                }
-            );
-        } catch (error) {
-            console.error('Error sending message:', error);
-            setIsStreaming(false);
-            setCurrentStreamContent('');
-        }
+        await sendMessage(message);
     };
 
     const handleClearSession = async () => {
-        if (!apiRef.current || isStreaming) return;
-        
-        try {
-            await apiRef.current.clearSession();
-            setMessages([]);
-            setCurrentStreamContent('');
-            setTokenInfo(null);
-            setCostInfo(null);
-        } catch (error) {
-            console.error('Error clearing session:', error);
-        }
+        if (isStreaming) return;
+        await clearSession();
     };
 
     const handleInterrupt = async () => {
-        if (!apiRef.current || !isStreaming) return;
-        
-        try {
-            await apiRef.current.interruptSession();
-            setIsStreaming(false);
-            
-            // Salva conteúdo parcial como mensagem
-            if (currentStreamContent) {
-                setMessages(prev => [...prev, {
-                    role: 'assistant',
-                    content: currentStreamContent + '\n\n[Interrompido]',
-                    timestamp: new Date()
-                } as ChatMessage]);
-                setCurrentStreamContent('');
-            }
-        } catch (error) {
-            console.error('Error interrupting session:', error);
-        }
+        if (!isStreaming) return;
+        await interruptStreaming();
     };
 
     return (
@@ -223,10 +103,10 @@ export const ChatInterface: React.FC = () => {
                             role="assistant"
                             isStreaming={true}
                         />
-                        {tokenInfoRef.current && (
+                        {tokenInfo && (
                             <div className="token-info streaming-info">
-                                Tokens: {tokenInfoRef.current.input}↑ {tokenInfoRef.current.output}↓
-                                {costInfoRef.current && ` | Custo: $${costInfoRef.current.toFixed(6)}`}
+                                Tokens: {tokenInfo.input}↑ {tokenInfo.output}↓
+                                {costInfo && ` | Custo: $${costInfo.toFixed(6)}`}
                             </div>
                         )}
                     </div>

@@ -3,7 +3,6 @@ interface StreamingState {
     codeBlockCount: number;
     isInInlineCode: boolean;
     currentLanguage: string;
-    isStreamingPaused: boolean;
     currentPosition: number;
 }
 
@@ -28,7 +27,6 @@ export class StreamingMarkdownRenderer {
             codeBlockCount: 0,
             isInInlineCode: false,
             currentLanguage: '',
-            isStreamingPaused: false,
             currentPosition: 0
         };
         this.autoScrollThreshold = window.innerHeight * 0.5;
@@ -59,32 +57,8 @@ export class StreamingMarkdownRenderer {
     }
 
     private setupStreamingControl(): void {
-        const controlButton = document.createElement('button');
-        controlButton.className = 'pause-scroll-button';
-        controlButton.innerHTML = `
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="pause-icon">
-                <path d="M15 6.75a.75.75 0 00-.75.75V18a.75.75 0 00.75.75h.75a.75.75 0 00.75-.75V7.5a.75.75 0 00-.75-.75H15zM7.5 6.75a.75.75 0 00-.75.75V18c0 .414.336.75.75.75h.75a.75.75 0 00.75-.75V7.5a.75.75 0 00-.75-.75h-.75z" />
-            </svg>
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="play-icon hidden">
-                <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347c-.75.412-1.667-.13-1.667-.986V5.653z" />
-            </svg>
-        `;
-        document.body.appendChild(controlButton);
-
-        controlButton.addEventListener('click', () => {
-            this.state.isStreamingPaused = !this.state.isStreamingPaused;
-            controlButton.classList.toggle('paused');
-            const pauseIcon = controlButton.querySelector('.pause-icon');
-            const playIcon = controlButton.querySelector('.play-icon');
-            if (pauseIcon && playIcon) {
-                pauseIcon.classList.toggle('hidden');
-                playIcon.classList.toggle('hidden');
-            }
-
-            if (!this.state.isStreamingPaused) {
-                this.resumeStreaming();
-            }
-        });
+        // Botão de pause/play removido
+        // O streaming agora flui continuamente sem interrupção manual
     }
 
     private performAutoScroll(): void {
@@ -112,30 +86,61 @@ export class StreamingMarkdownRenderer {
         this.performAutoScroll();
     }
     
-    async streamCharacterByCharacter(markdown: string, speed = 30): Promise<void> {
-        // Adiciona markdown com efeito de streaming caractere por caractere
-        for (let i = 0; i < markdown.length; i++) {
-            if (this.state.isStreamingPaused) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-                i--; // Retry the same character after pause
-                continue;
-            }
+    // Nova implementação: streaming por chunks com buffer inteligente
+    async streamByChunks(markdown: string, chunkSize = 50, speed = 10): Promise<void> {
+        const chunks = this.createSmartChunks(markdown, chunkSize);
+        
+        for (const chunk of chunks) {
             
-            this.currentText += markdown[i];
+            this.currentText += chunk;
             this.updateDisplay();
             this.performAutoScroll();
             
-            // Velocidade variável: mais rápido para espaços, mais lento para texto
-            const delay = markdown[i] === ' ' ? speed / 2 : speed;
-            await new Promise(resolve => setTimeout(resolve, delay));
+            // Delay menor entre chunks (não entre caracteres)
+            await new Promise(resolve => setTimeout(resolve, speed));
         }
+    }
+    
+    // Cria chunks inteligentes baseados em limites naturais de palavras
+    private createSmartChunks(text: string, targetSize: number): string[] {
+        const chunks: string[] = [];
+        let currentChunk = '';
+        let i = 0;
+        
+        while (i < text.length) {
+            currentChunk += text[i];
+            
+            // Verifica se chegou ao tamanho alvo e procura o próximo espaço
+            if (currentChunk.length >= targetSize) {
+                // Se estiver no meio de uma palavra, continua até o fim dela
+                while (i + 1 < text.length && text[i + 1] !== ' ' && text[i + 1] !== '\n') {
+                    i++;
+                    currentChunk += text[i];
+                }
+                
+                chunks.push(currentChunk);
+                currentChunk = '';
+            }
+            
+            i++;
+        }
+        
+        // Adiciona o último chunk se houver
+        if (currentChunk) {
+            chunks.push(currentChunk);
+        }
+        
+        return chunks;
+    }
+    
+    // Método legado mantido para compatibilidade (usar streamByChunks preferencialmente)
+    async streamCharacterByCharacter(markdown: string, speed = 30): Promise<void> {
+        // Redireciona para o novo método otimizado
+        return this.streamByChunks(markdown, 1, speed);
     }
 
     private async startStreaming(): Promise<void> {
         while (this.state.currentPosition < this.markdownContent.length) {
-            if (this.state.isStreamingPaused) {
-                break;
-            }
 
             await new Promise(resolve => setTimeout(resolve, this.streamingSpeed));
             this.processCharacter(this.markdownContent[this.state.currentPosition]);
@@ -157,7 +162,6 @@ export class StreamingMarkdownRenderer {
             codeBlockCount: 0,
             isInInlineCode: false,
             currentLanguage: '',
-            isStreamingPaused: false,
             currentPosition: 0
         };
         window.scrollTo({ top: 0, behavior: 'smooth' });
