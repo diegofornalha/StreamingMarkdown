@@ -112,18 +112,22 @@ export class StreamingMarkdownRenderer {
         this.performAutoScroll();
     }
     
-    async appendMarkdownWithStreaming(markdown: string, speed = 10): Promise<void> {
+    async streamCharacterByCharacter(markdown: string, speed = 30): Promise<void> {
         // Adiciona markdown com efeito de streaming caractere por caractere
         for (let i = 0; i < markdown.length; i++) {
             if (this.state.isStreamingPaused) {
-                break;
+                await new Promise(resolve => setTimeout(resolve, 100));
+                i--; // Retry the same character after pause
+                continue;
             }
             
             this.currentText += markdown[i];
             this.updateDisplay();
             this.performAutoScroll();
             
-            await new Promise(resolve => setTimeout(resolve, speed));
+            // Velocidade variável: mais rápido para espaços, mais lento para texto
+            const delay = markdown[i] === ' ' ? speed / 2 : speed;
+            await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
 

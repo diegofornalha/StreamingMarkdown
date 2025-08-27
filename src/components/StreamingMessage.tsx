@@ -29,13 +29,22 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
             if (content !== lastContentRef.current && rendererRef.current) {
                 const newContent = content.slice(lastContentRef.current.length);
                 if (newContent) {
-                    // Sempre usa appendMarkdown para adicionar conteúdo
-                    rendererRef.current.appendMarkdown(newContent);
-                    lastContentRef.current = content;
+                    if (isStreaming) {
+                        // Durante o streaming, adiciona caractere por caractere
+                        rendererRef.current.streamCharacterByCharacter(newContent, 20)
+                            .then(() => {
+                                lastContentRef.current = content;
+                            })
+                            .catch(err => console.error('Streaming error:', err));
+                    } else {
+                        // Mensagem completa, adiciona tudo de uma vez
+                        rendererRef.current.appendMarkdown(newContent);
+                        lastContentRef.current = content;
+                    }
                 }
             }
         }
-    }, [content, role]);
+    }, [content, role, isStreaming]);
 
     return (
         <div className={`message message-${role}`}>
