@@ -105,6 +105,13 @@ export class StreamingMarkdownRenderer {
         await this.startStreaming();
     }
 
+    appendMarkdown(markdown: string): void {
+        // Método para adicionar markdown incrementalmente
+        this.currentText += markdown;
+        this.updateDisplay();
+        this.performAutoScroll();
+    }
+
     private async startStreaming(): Promise<void> {
         while (this.state.currentPosition < this.markdownContent.length) {
             if (this.state.isStreamingPaused) {
