@@ -18,6 +18,9 @@ export const ChatInterface: React.FC = () => {
     const costInfoRef = useRef<number | null>(null);
 
     useEffect(() => {
+        // Evita duplicação em Strict Mode
+        if (apiRef.current) return;
+        
         // Inicializa API
         apiRef.current = new ChatAPI();
         
@@ -28,8 +31,9 @@ export const ChatInterface: React.FC = () => {
 
         return () => {
             // Cleanup
-            if (apiRef.current) {
+            if (apiRef.current && sessionId) {
                 apiRef.current.deleteSession().catch(console.error);
+                apiRef.current = null;
             }
         };
     }, []);
