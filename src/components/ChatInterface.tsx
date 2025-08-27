@@ -197,7 +197,7 @@ export const ChatInterface: React.FC = () => {
 
             <div className="chat-messages">
                 {messages.map((msg, index) => (
-                    <div key={index}>
+                    <div key={`msg-${index}`}>
                         <StreamingMessage
                             content={msg.content}
                             role={msg.role}
@@ -213,14 +213,14 @@ export const ChatInterface: React.FC = () => {
                 ))}
                 
                 {isStreaming && currentStreamContent && (
-                    <div>
+                    <div key="streaming-msg">
                         <StreamingMessage
                             content={currentStreamContent}
                             role="assistant"
                             isStreaming={true}
                         />
                         {tokenInfoRef.current && (
-                            <div className="token-info">
+                            <div className="token-info streaming-info">
                                 Tokens: {tokenInfoRef.current.input}↑ {tokenInfoRef.current.output}↓
                                 {costInfoRef.current && ` | Custo: $${costInfoRef.current.toFixed(6)}`}
                             </div>
@@ -321,6 +321,22 @@ export const ChatInterface: React.FC = () => {
                     font-size: 11px;
                     color: var(--text-secondary, #666);
                     background: var(--bg-tertiary, #f9f9f9);
+                    animation: fadeIn 0.3s ease-in;
+                }
+                
+                .streaming-info {
+                    opacity: 0.7;
+                }
+                
+                @keyframes fadeIn {
+                    from {
+                        opacity: 0;
+                        transform: translateY(-5px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
                 }
 
                 @media (max-width: 640px) {
