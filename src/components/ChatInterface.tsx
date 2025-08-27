@@ -38,13 +38,13 @@ export const ChatInterface: React.FC = () => {
     }, [messages, currentStreamContent]);
 
     const handleSendMessage = async (message: string) => {
-        if (isStreaming) return;
+        // Não bloqueia mais durante streaming - permite múltiplas mensagens
         console.log('Sending message:', message);
         await sendMessage(message);
     };
 
     const handleClearSession = async () => {
-        if (isStreaming) return;
+        // Permite limpar sessão a qualquer momento
         await clearSession();
     };
 
@@ -63,7 +63,7 @@ export const ChatInterface: React.FC = () => {
                     )}
                     <button
                         onClick={handleClearSession}
-                        disabled={isStreaming}
+                        disabled={false}
                         className="control-button"
                     >
                         🔄 Limpar
@@ -117,8 +117,8 @@ export const ChatInterface: React.FC = () => {
 
             <MessageInput
                 onSendMessage={handleSendMessage}
-                disabled={isStreaming}
-                placeholder={isStreaming ? "Aguardando resposta..." : "Digite sua mensagem..."}
+                disabled={false}
+                placeholder="Digite sua mensagem..."
             />
 
             <style jsx>{`

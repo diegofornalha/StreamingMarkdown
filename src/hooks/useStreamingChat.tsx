@@ -124,7 +124,8 @@ export function useStreamingChat() {
     
     // Envia mensagem com buffering inteligente
     const sendMessage = useCallback(async (message: string) => {
-        if (!apiRef.current || state.isStreaming) return;
+        if (!apiRef.current) return;
+        // Removido bloqueio - permite enviar múltiplas mensagens mesmo durante streaming
         
         // Adiciona mensagem do usuário
         const userMessage: ChatMessage = {
@@ -210,11 +211,11 @@ export function useStreamingChat() {
             console.error('Error sending message:', error);
             dispatch({ type: 'FINISH_STREAMING' });
         }
-    }, [state.isStreaming, flushBuffer]);
+    }, [flushBuffer]); // Removido state.isStreaming da dependência
     
     // Limpa sessão
     const clearSession = useCallback(async () => {
-        if (!apiRef.current || state.isStreaming) return;
+        if (!apiRef.current) return; // Permite limpar a qualquer momento
         
         try {
             await apiRef.current.clearSession();
@@ -222,7 +223,7 @@ export function useStreamingChat() {
         } catch (error) {
             console.error('Error clearing session:', error);
         }
-    }, [state.isStreaming]);
+    }, []); // Removido state.isStreaming - permite limpar a qualquer momento
     
     // Interrompe streaming
     const interruptStreaming = useCallback(async () => {
