@@ -15,8 +15,11 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
     const containerRef = useRef<HTMLDivElement>(null);
     const rendererRef = useRef<StreamingMarkdownRenderer | null>(null);
     const lastContentRef = useRef<string>('');
+    const userContainerRef = useRef<HTMLDivElement>(null);
+    const userAnimationRef = useRef<number | null>(null);
 
     useEffect(() => {
+        // Streaming para mensagens do assistant (Claude)
         if (containerRef.current && content && role === 'assistant') {
             // Cria renderer se não existir
             if (!rendererRef.current) {
@@ -31,13 +34,19 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
                 if (newContent) {
                     if (isStreaming) {
                         // Durante o streaming, adiciona por chunks otimizados
-                        // @ts-ignore - streamByChunks \u00e9 um novo m\u00e9todo
-                        const streamMethod = rendererRef.current.streamByChunks || rendererRef.current.streamCharacterByCharacter;
-                        streamMethod.call(rendererRef.current, newContent, 50, 10)
-                            .then(() => {
-                                lastContentRef.current = content;
-                            })
-                            .catch(err => console.error('Streaming error:', err));
+                        // Usa o método streamByChunks que é mais eficiente
+                        const renderer = rendererRef.current as any;
+                        if (renderer.streamByChunks) {
+                            renderer.streamByChunks(newContent, 50, 10)
+                                .then(() => {
+                                    lastContentRef.current = content;
+                                })
+                                .catch((err: any) => console.error('Streaming error:', err));
+                        } else {
+                            // Fallback para appendMarkdown se streamByChunks não existir
+                            renderer.appendMarkdown(newContent);
+                            lastContentRef.current = content;
+                        }
                     } else {
                         // Mensagem completa, adiciona tudo de uma vez
                         rendererRef.current.appendMarkdown(newContent);
@@ -46,6 +55,38 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
                 }
             }
         }
+        
+        // Streaming para mensagens do usuário com efeito de digitação
+        if (userContainerRef.current && content && role === 'user') {
+            // Cancela animação anterior se existir
+            if (userAnimationRef.current) {
+                cancelAnimationFrame(userAnimationRef.current);
+            }
+            
+            let index = 0;
+            const text = content;
+            userContainerRef.current.textContent = '';
+            
+            const typeWriter = () => {
+                if (index < text.length && userContainerRef.current) {
+                    userContainerRef.current.textContent += text.charAt(index);
+                    index++;
+                    userAnimationRef.current = requestAnimationFrame(() => {
+                        setTimeout(typeWriter, 20); // Velocidade de digitação (20ms por caractere)
+                    });
+                }
+            };
+            
+            // Inicia o efeito de digitação
+            typeWriter();
+        }
+        
+        // Cleanup
+        return () => {
+            if (userAnimationRef.current) {
+                cancelAnimationFrame(userAnimationRef.current);
+            }
+        };
     }, [content, role, isStreaming]);
 
     return (
@@ -55,11 +96,11 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
             </div>
             <div className="message-content">
                 {role === 'user' ? (
-                    <div className="user-message">{content}</div>
+                    <div ref={userContainerRef} className="user-message"></div>
                 ) : (
                     <div ref={containerRef} className="assistant-message notion-content" />
                 )}
-                {isStreaming && (
+                {isStreaming && role === 'assistant' && (
                     <span className="streaming-indicator">
                         <span className="dot"></span>
                         <span className="dot"></span>
@@ -117,6 +158,7 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
                     color: var(--text-primary, #1a1a1a);
                     white-space: pre-wrap;
                     word-wrap: break-word;
+                    min-height: 24px;
                 }
 
                 .assistant-message {
@@ -129,6 +171,7 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
                     display: inline-flex;
                     gap: 4px;
                     margin-left: 8px;
+                    vertical-align: middle;
                 }
 
                 .dot {

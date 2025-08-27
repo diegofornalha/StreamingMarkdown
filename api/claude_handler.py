@@ -66,9 +66,9 @@ class ClaudeHandler:
         # Buffer para acumular texto antes de enviar
         text_buffer = []
         buffer_size = 0
-        BUFFER_THRESHOLD = 100  # Envia a cada 100 caracteres
+        BUFFER_THRESHOLD = 20  # Envia a cada 20 caracteres (mais responsivo)
         last_flush = time.time()
-        FLUSH_INTERVAL = 0.1  # Flush a cada 100ms
+        FLUSH_INTERVAL = 0.05  # Flush a cada 50ms (mais rápido)
         
         async def flush_buffer():
             """Envia conteúdo do buffer."""
@@ -84,6 +84,12 @@ class ClaudeHandler:
                 buffer_size = 0
         
         try:
+            # Notifica que começou a processar
+            yield {
+                "type": "processing",
+                "session_id": session_id
+            }
+            
             # Envia query
             await client.query(message)
             
@@ -102,6 +108,8 @@ class ClaudeHandler:
                                 async for response in flush_buffer():
                                     yield response
                                 last_flush = current_time
+                                # Pequeno delay para suavizar streaming
+                                await asyncio.sleep(0.01)
                                 
                         elif isinstance(block, ToolUseBlock):
                             # Flush buffer antes de enviar tool use
