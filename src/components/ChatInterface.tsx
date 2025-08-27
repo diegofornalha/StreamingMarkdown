@@ -102,17 +102,29 @@ export const ChatInterface: React.FC = () => {
                     console.log('Stream complete, final content:', streamContentRef.current);
                     // Streaming completo - adiciona mensagem final
                     if (streamContentRef.current) {
-                        setMessages(prev => [...prev, {
-                            role: 'assistant',
-                            content: streamContentRef.current,
-                            timestamp: new Date(),
-                            tokens: tokenInfoRef.current || undefined,
-                            cost: costInfoRef.current || undefined
-                        } as ChatMessage]);
+                        // Limpa o conteúdo de streaming ANTES de adicionar à lista
+                        const finalContent = streamContentRef.current;
+                        const finalTokens = tokenInfoRef.current;
+                        const finalCost = costInfoRef.current;
+                        
+                        // Limpa o estado de streaming primeiro
+                        setCurrentStreamContent('');
+                        setIsStreaming(false);
+                        
+                        // Depois adiciona a mensagem final
+                        setTimeout(() => {
+                            setMessages(prev => [...prev, {
+                                role: 'assistant',
+                                content: finalContent,
+                                timestamp: new Date(),
+                                tokens: finalTokens || undefined,
+                                cost: finalCost || undefined
+                            } as ChatMessage]);
+                        }, 0);
+                    } else {
+                        setCurrentStreamContent('');
+                        setIsStreaming(false);
                     }
-                    
-                    setCurrentStreamContent('');
-                    setIsStreaming(false);
                 }
             );
         } catch (error) {
@@ -201,11 +213,19 @@ export const ChatInterface: React.FC = () => {
                 ))}
                 
                 {isStreaming && currentStreamContent && (
-                    <StreamingMessage
-                        content={currentStreamContent}
-                        role="assistant"
-                        isStreaming={true}
-                    />
+                    <div>
+                        <StreamingMessage
+                            content={currentStreamContent}
+                            role="assistant"
+                            isStreaming={true}
+                        />
+                        {tokenInfoRef.current && (
+                            <div className="token-info">
+                                Tokens: {tokenInfoRef.current.input}↑ {tokenInfoRef.current.output}↓
+                                {costInfoRef.current && ` | Custo: $${costInfoRef.current.toFixed(6)}`}
+                            </div>
+                        )}
+                    </div>
                 )}
                 
                 <div ref={messagesEndRef} />
