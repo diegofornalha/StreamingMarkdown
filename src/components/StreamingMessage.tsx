@@ -17,10 +17,10 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
     const lastContentRef = useRef<string>('');
 
     useEffect(() => {
-        if (containerRef.current && content) {
+        if (containerRef.current && content && role === 'assistant') {
             // Cria renderer se não existir
             if (!rendererRef.current) {
-                const containerId = `message-${Date.now()}`;
+                const containerId = `message-${Date.now()}-${Math.random()}`;
                 containerRef.current.id = containerId;
                 rendererRef.current = new StreamingMarkdownRenderer(containerId);
             }
@@ -29,12 +29,13 @@ export const StreamingMessage: React.FC<StreamingMessageProps> = ({
             if (content !== lastContentRef.current && rendererRef.current) {
                 const newContent = content.slice(lastContentRef.current.length);
                 if (newContent) {
+                    // Sempre usa appendMarkdown para adicionar conteúdo
                     rendererRef.current.appendMarkdown(newContent);
                     lastContentRef.current = content;
                 }
             }
         }
-    }, [content]);
+    }, [content, role]);
 
     return (
         <div className={`message message-${role}`}>

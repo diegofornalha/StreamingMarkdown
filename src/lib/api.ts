@@ -91,12 +91,17 @@ class ChatAPI {
         }
 
         let buffer = '';
+        let completeCalled = false;
 
         while (true) {
             const { done, value } = await reader.read();
             
             if (done) {
-                if (onComplete) onComplete();
+                // Só chama onComplete se ainda não foi chamado
+                if (onComplete && !completeCalled) {
+                    completeCalled = true;
+                    onComplete();
+                }
                 break;
             }
 
@@ -114,7 +119,13 @@ class ChatAPI {
                             if (data.type === 'error' && onError) {
                                 onError(data.error || 'Unknown error');
                             } else if (data.type === 'done') {
-                                if (onComplete) onComplete();
+                                // Marca como completo e chama callback
+                                if (onComplete && !completeCalled) {
+                                    completeCalled = true;
+                                    onComplete();
+                                }
+                                // Não precisa processar mais após 'done'
+                                return;
                             } else {
                                 onStream(data);
                             }
